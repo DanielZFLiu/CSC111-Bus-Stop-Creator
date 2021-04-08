@@ -164,7 +164,9 @@ class City(Drawable):
             p1.neighbours.update({p2: dist})
             p2.neighbours.update({p1: dist})
 
-            self._streets.add((pos1, pos2))
+            # Prevent duplicate streets: (a, b) = (b, a)
+            if (pos2, pos1) not in self._streets:
+                self._streets.add((pos1, pos2))
         else:
             raise ValueError
 
