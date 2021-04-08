@@ -77,13 +77,24 @@ if __name__ == "__main__":
 
                     # hold i to make an intersection
                     if i_down:
-                        city.add_intersection(mouse_pos)
+                        city.add_place(mouse_pos, kind='intersection')
                     else:
                         city.add_place(mouse_pos)
 
                 # Only need to update the screen when something is added to the city
                 screen.fill(GRASS)  # background colour
                 city.draw(screen)
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_b:  # press 'b' to place bus stops
+                    # currently just a placeholder value
+                    bus_stops = city.get_bus_stops(2)
+
+                    for bus_stop in bus_stops:
+                        city.bus_stop_projected(bus_stop)
+
+            screen.fill(GRASS)
+            city.draw(screen)
 
         pygame.display.flip()
 
