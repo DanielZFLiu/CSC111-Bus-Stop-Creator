@@ -1,0 +1,11 @@
+# Python libraries required to run this project
+
+# Visualization
+pygame~=2.0.1
+
+# Data manipulation
+pandas~=1.2.3
+numpy~=1.19.5
+
+# Machine learning algorithms
+scikit-learn~=0.24.1
