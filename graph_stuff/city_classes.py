@@ -291,7 +291,7 @@ class City(Drawable):
                       Bus stop on street
         """
         min_dist = float('inf')
-        new_pos = None
+        bus_stop_proj = None
         target_street = None
 
         # Calculating closest street
@@ -301,18 +301,18 @@ class City(Drawable):
 
             if dist < min_dist:
                 min_dist = dist
-                new_pos = proj
+                bus_stop_proj = proj
                 target_street = street
 
-        if new_pos is not None and target_street is not None:
+        if bus_stop_proj is not None and target_street is not None:
             p1 = target_street[0]
             p2 = target_street[1]
 
             if p1 in self._places and p2 in self._places:
-                self.add_place(bus_stop, kind='bus_stop')
+                self.add_place(bus_stop_proj, kind='bus_stop')
                 self.delete_street(p1, p2)
-                self.add_street(p1, bus_stop)
-                self.add_street(p2, bus_stop)
+                self.add_street(p1, bus_stop_proj)
+                self.add_street(p2, bus_stop_proj)
         else:
             return
 
