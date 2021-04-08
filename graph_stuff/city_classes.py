@@ -22,6 +22,7 @@ import random
 import pandas as pd
 import numpy as np
 
+
 class _Place(Drawable):
     """A vertex in the City graph, used to represent a place in the city.
 
@@ -386,20 +387,16 @@ class City(Drawable):
         # Since the street is usually drawn thicker than one pixel, I want some leeway
         threshold = self.STREET_WIDTH // 2
         a, b = street
-        x, y = m_pos
 
         # A simple to way to check if the mouse pos is near a street is to compare
         # distance between a, m_pos and b, m_pos, and see if the added distance is close to
         # the distance between a, b
         street_length = self.get_distance(a, b)  # summed distances will be compared to this
-        a_to_m_pos = math.sqrt(
-            (a[0] - x) ** 2 + (a[1] - y) ** 2
-        )
-        b_to_m_pos = math.sqrt(
-            (b[0] - x) ** 2 + (b[1] - y) ** 2
-        )
-        summed = a_to_m_pos + b_to_m_pos
 
+        a_to_m_pos = self._dist(a, m_pos)
+        b_to_m_pos = self._dist(b, m_pos)
+
+        summed = a_to_m_pos + b_to_m_pos
         return abs(summed - street_length) <= threshold
 
     def draw(self, screen: pygame.Surface) -> None:

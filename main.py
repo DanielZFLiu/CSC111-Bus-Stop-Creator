@@ -88,6 +88,7 @@ if __name__ == "__main__":
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_b:  # press 'b' to place bus stops
                     # TODO: add user choice for bus stop number
+                    # TODO: currently pressing b more than once will break the program; fix?
                     bus_stops = city.get_bus_stops(3)
 
                     for bus_stop in bus_stops:
