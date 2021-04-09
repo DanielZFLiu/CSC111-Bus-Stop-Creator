@@ -18,8 +18,10 @@ from sklearn.cluster import KMeans
 
 import pygame
 import math
+import random
 import pandas as pd
 import numpy as np
+import copy
 
 
 class _Place(Drawable):
@@ -38,6 +40,15 @@ class _Place(Drawable):
     def __init__(self, pos: tuple[float, float]) -> None:
         self.pos = pos
         self.neighbours = dict()
+
+    def __str__(self) -> str:
+        """
+        Convert this place to a string in the following format:
+        "place x y"
+        Where x and y are the coordinates of this place
+        """
+        x, y = self.pos
+        return "place " + str(x) + " " + str(y)
 
     def draw(self, screen: pygame.Surface) -> None:
         """Draws this item within the pygame window
@@ -76,17 +87,49 @@ class _Intersection(_Place):
     traffic_light: int
     stop_time: float
 
-    def __init__(self, pos, traffic_light: int = 0, stop_time: int = 0) -> None:
+    def __init__(self, pos: tuple[float, float],
+                 traffic_light: int = 0, stop_time: int = 0) -> None:
         # TODO: adjust the default values later on
         super().__init__(pos)
         self.traffic_light = traffic_light
         self.stop_time = stop_time
+
+    def __str__(self) -> str:
+        """
+        Convert this intersection to a string in the following format:
+        "intersection x y"
+        Where x and y are the coordinates of this place
+        """
+        x, y = self.pos
+        return "intersection " + str(x) + " " + str(y)
 
     def draw(self, screen: pygame.Surface) -> None:
         """Draws this item within the pygame window
         """
         x, y = self.pos
         pygame.draw.circle(screen, STREET, (x, y), City.STREET_WIDTH)
+
+
+class _BusStop(_Place):
+    """A vertex in the City graph, used to represent a bus stop in the city.
+
+    Instance Attributes:
+        - traffic_light: 0 for a green light, 1 for a red light
+        - wait_time: Time the bus takes at the bus stop
+    """
+    wait_time: float
+
+    def __init__(self, pos: tuple[float, float]) -> None:
+        # TODO: adjust the default values later on
+        super().__init__(pos)
+        self.wait_time = random.randint(1, 5)
+
+    def draw(self, screen: pygame.Surface) -> None:
+        """Draws this item within the pygame window
+        """
+        x, y = self.pos
+        rect = pygame.Rect(x - self.WIDTH // 2, y - self.WIDTH // 2, self.WIDTH, self.WIDTH)
+        pygame.draw.rect(screen, BUS_STOP, rect)
 
 
 class City(Drawable):
@@ -100,6 +143,7 @@ class City(Drawable):
         - STREET_WIDTH: The width of a street in pixels on the pygame window
     """
     _places: dict[tuple, _Place]
+    _bus_stops: dict[tuple, _Place]
     _streets: set[tuple[tuple, tuple]]
     STREET_WIDTH: int = 10
 
@@ -108,21 +152,74 @@ class City(Drawable):
         self._streets = set()
 
     # ========================================================
+    # File I/O
+    # ========================================================
+    @staticmethod
+    def build_from_file(input_file: str) -> City:
+        """
+        Build a city from the given .txt file.
+
+        Preconditions:
+          - The input file is in the same format described in export_to_file
+        """
+        city = City()
+
+        with open(input_file, 'r') as f:
+            for line in f:
+                parsed_line = line.split()
+
+                if parsed_line[0] in {"place", "intersection"}:
+                    # The line encodes a place
+                    kind = parsed_line[0]
+                    x, y = int(parsed_line[1]), int(parsed_line[2])
+                    city.add_place((x, y), kind)
+                else:
+                    # The line encodes a street
+                    x1, y1 = int(parsed_line[0]), int(parsed_line[1])
+                    x2, y2 = int(parsed_line[2]), int(parsed_line[3])
+                    city.add_street((x1, y1), (x2, y2))
+
+        return city
+
+    def export_to_file(self, output_file: str) -> None:
+        """
+        Export the city to a .txt file in the following format:
+
+        For every place (except bus stops):
+        <place type> <x coord> <y coord>
+
+        For every street:
+        <x coord 1> <y coord 1> <x coord 2> <y coord 2>
+        """
+        with open(output_file, 'w') as f:
+            # First, write all the place information
+            for pos in self._places:
+                place = self._places[pos]
+
+                f.write(str(place) + '\n')
+
+            # Next, write all the street information
+            for street in self._streets:
+                p1, p2 = street
+                x1, y1 = p1
+                x2, y2 = p2
+                f.write(str(x1) + " " + str(y1) + " " + str(x2) + " " + str(y2) + '\n')
+
+    # ========================================================
     # Mutating instance attributes
     # ========================================================
 
-    def add_place(self, pos: tuple[float, float]) -> None:
+    def add_place(self, pos: tuple[float, float], kind: str = 'place') -> None:
         """Add a _Place to the dictionary with the same coordinates as the mouse click
         """
         if pos not in self._places:
-            p = _Place(pos)
-            self._places.update({pos: p})
+            if kind == 'bus_stop':
+                p = _BusStop(pos)
+            elif kind == 'intersection':
+                p = _Intersection(pos)
+            else:
+                p = _Place(pos)
 
-    def add_intersection(self, pos: tuple[float, float]) -> None:
-        """Add a _Intersection to the dictionary with the same coordinates as the mouse click
-        """
-        if pos not in self._places:
-            p = _Intersection(pos)
             self._places.update({pos: p})
 
     def add_street(self, pos1: tuple, pos2: tuple) -> None:
@@ -138,7 +235,6 @@ class City(Drawable):
             p2 = self._places[pos2]
 
             dist = self._dist(pos1, pos2)
-
             p1.neighbours.update({p2: dist})
             p2.neighbours.update({p1: dist})
 
@@ -260,9 +356,10 @@ class City(Drawable):
 
         return (shortest_path, distances[end])
 
-    def bus_stop_projected(self, bus_stop: tuple[float, float]) -> tuple[float, float]:
+    def _bus_stop_projected(self, bus_stop: tuple[float, float]) -> None:
         """
-        Return the coordinates of the bus stop projected onto the closet street
+        Given a bus_stop position, add a bus stop on the closest street. This will mutate the
+        two endpoints of the street.
                       Theoretical bus stop position
                       C
                       |
@@ -271,36 +368,55 @@ class City(Drawable):
                       Bus stop on street
         """
         min_dist = float('inf')
-        curr_pos = bus_stop
+        bus_stop_proj = None
+        target_street = None
 
+        # Calculating closest street
         for street in self._streets:
             proj = self._proj(street[0], street[1], bus_stop)
             dist = self._dist(bus_stop, proj)
 
             if dist < min_dist:
                 min_dist = dist
-                curr_pos = proj
+                bus_stop_proj = proj
+                target_street = street
 
-        return curr_pos
+        if bus_stop_proj is not None and target_street is not None:
+            p1 = target_street[0]
+            p2 = target_street[1]
+
+            if p1 in self._places and p2 in self._places:
+                # Need to round bus_stop_proj's coords
+                bus_stop_proj = (int(bus_stop_proj[0]), int(bus_stop_proj[1]))
+                self.add_place(bus_stop_proj, kind='bus_stop')
+                self.delete_street(p1, p2)
+                self.add_street(p1, bus_stop_proj)
+                self.add_street(p2, bus_stop_proj)
+        else:
+            return
 
     def _proj(self, a, b, p) -> tuple[float, float]:
         """Return the coordinates of the projection of point p onto line ab
         """
-        ap = (p[0] - a[0], p[1] - a[1])
-        ab = (b[0] - a[0], b[1] - a[1])
+        vec_a = np.asarray(a)
+        vec_b = np.asarray(b)
+        vec_p = np.asarray(p)
 
-        t = (ap[0] * ab[0] + ap[1] * ab[1]) / (ab[0] ** 2 + ab[1] ** 2)
+        ap = vec_p - vec_a
+        ab = vec_b - vec_a
+
+        t = np.dot(ap, ab) / np.dot(ab, ab)
         t = max(0, min(1, t))
+        res = vec_a + t * ab
 
-        temp = (t * ab[0], t * ab[1])
-        return (a[0] + temp[0], a[1] + temp[1])
+        return tuple(res)
 
     def _dist(self, pos1: tuple[float, float], pos2: tuple[float, float]) -> float:
         x_squared = (pos1[0] - pos2[0]) ** 2
         y_squared = (pos1[1] - pos2[1]) ** 2
         return math.sqrt(x_squared + y_squared)
 
-    def get_bus_stops(self, n_clusters) -> set[tuple]:
+    def _get_bus_stops(self, n_clusters) -> set[tuple]:
         """Return a set of bus stop coordinates calculated using KMeans clustering algorithm
         """
         temp = [list(x) for x in self.get_all_places()]
@@ -311,6 +427,21 @@ class City(Drawable):
         centers = km.cluster_centers_
 
         return set(map(tuple, centers))
+
+    def add_bus_stops(self, num: int) -> City:
+        """
+        Return a new city with <num> bus stops added.
+
+        We could have just mutated the city, but that would have made importing/exporting
+        harder. So we decided to keep the modified city separate from the user made one.
+        """
+        new_city = copy.deepcopy(self)
+        bus_stops = new_city._get_bus_stops(num)
+
+        for bus_stop in bus_stops:
+            new_city._bus_stop_projected(bus_stop)
+
+        return new_city
 
     # ========================================================
     # Pygame interaction
@@ -349,20 +480,16 @@ class City(Drawable):
         # Since the street is usually drawn thicker than one pixel, I want some leeway
         threshold = self.STREET_WIDTH // 2
         a, b = street
-        x, y = m_pos
 
         # A simple to way to check if the mouse pos is near a street is to compare
         # distance between a, m_pos and b, m_pos, and see if the added distance is close to
         # the distance between a, b
         street_length = self.get_distance(a, b)  # summed distances will be compared to this
-        a_to_m_pos = math.sqrt(
-            (a[0] - x) ** 2 + (a[1] - y) ** 2
-        )
-        b_to_m_pos = math.sqrt(
-            (b[0] - x) ** 2 + (b[1] - y) ** 2
-        )
-        summed = a_to_m_pos + b_to_m_pos
 
+        a_to_m_pos = self._dist(a, m_pos)
+        b_to_m_pos = self._dist(b, m_pos)
+
+        summed = a_to_m_pos + b_to_m_pos
         return abs(summed - street_length) <= threshold
 
     def draw(self, screen: pygame.Surface) -> None:
@@ -381,6 +508,3 @@ class City(Drawable):
         """A helper method to draw a street (a line) between two positions on a screen.
         """
         pygame.draw.line(screen, STREET, street[0], street[1], self.STREET_WIDTH)
-
-
-

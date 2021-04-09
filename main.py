@@ -12,27 +12,49 @@ from graph_stuff.city_classes import *
 from pygame_stuff.drawing import *
 
 WIDTH, HEIGHT = 1000, 800
-if __name__ == "__main__":
+
+
+def run_visualization(input_file: str = "",
+                      output_file: str = "data/default_file.txt") -> None:
+    """
+    Run the interactive city builder. If <input_file> != "", import the city from the file.
+
+    Controls:
+      - Click to place a regular place
+      - i + click to place a street intersection
+      - shift + click two places to connect them by a street
+      - ctrl + click to delete a street or place
+      - press b to make the bus stops (ONLY DOES ANYTHING IF THERE ARE NO BUS STOPS)
+      - ctrl + s to save the current city layout to the given output_file
+        (does not save bus stops - in fact, the city with bus stops and the user's
+        original city are different)
+
+    Preconditions:
+      - input_file and output_file, if specified, are .txt files in the data folder
+      - input_file must exist if specified
+    """
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     screen.fill(GRASS)  # initially fill the screen with grass colour
 
     # misc variables for running pygame and city
     running = True
-    shift_down = False  # whether the left shift key is down
-    ctrl_down = False  # whether the left control key is down
-    i_down = False  # whether the i key is being held down
 
     street_pair = []  # used for adding streets; keeps track of endpoints, resets for
     # every two pairs added
 
     city = City()
+    if input_file != "":
+        # Import a city instead
+        city = City.build_from_file(input_file)
+
+    city.draw(screen)  # Draw at the start
 
     while running:
         # Get whatever key is pressed
         key = pygame.key.get_pressed()
 
-        # Listen for keys
+        # Listen for keys that are HELD DOWN
         running = not key[pygame.K_ESCAPE]
         shift_down = key[pygame.K_LSHIFT]
         ctrl_down = key[pygame.K_LCTRL]
@@ -77,14 +99,36 @@ if __name__ == "__main__":
 
                     # hold i to make an intersection
                     if i_down:
-                        city.add_intersection(mouse_pos)
+                        city.add_place(mouse_pos, kind='intersection')
                     else:
                         city.add_place(mouse_pos)
 
                 # Only need to update the screen when something is added to the city
                 screen.fill(GRASS)  # background colour
                 city.draw(screen)
+                # The advantage of doing this is that the bus stops disappear when you modify
+                # the city, and that makes sense
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_b:
+                    # press 'b' to place bus stops
+                    # TODO: add user choice for bus stop number
+
+                    # Creates a deep copy of the city, mutates THAT, and display THAT
+                    display_city = city.add_bus_stops(3)
+                    screen.fill(GRASS)  # background colour
+                    display_city.draw(screen)
+                    # Draw this new city with the bus stops
+
+                if event.key == pygame.K_s and ctrl_down:
+                    # Ctrl + s to save the city
+                    city.export_to_file(output_file)
+                    print("City saved")
 
         pygame.display.flip()
 
     pygame.display.quit()
+
+
+if __name__ == "__main__":
+    run_visualization("data/default_file")
